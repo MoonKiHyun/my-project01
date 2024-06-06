@@ -1,10 +1,12 @@
-import React, { useRef, useState, useMemo, useCallback, useReducer } from "react";
-import Counter from "./Counter";
-import InputSample from "./InputSample";
-import Timer from "./Timer";
+import React, { useRef, useState, useMemo, useCallback, useReducer, createContext } from "react";
 import UserList from "./UserList";
 import CreateUser from "./CreateUser";
-import useInputs from "./useInputs";
+import { produce } from 'immer';
+/**
+ * useState를 사용해서 까다로운 객체를 사용할 때 불변성 관리가 힘들 때 사용하면 좋다.
+ * produce에 파라미터를 함수 하나만 넣게 되면 updater를 반환한다.
+ */
+window.produce = produce;
 
 function countActiveUser(users) {
   console.log('활성화 사용자 수를 세는 중...');
@@ -17,23 +19,31 @@ function reducer(state, action) {
     
     case 'CREATE_USER': {
       return {
-        inputs: initialState.inputs,
+        ...state,
         users: state.users.concat(action.user)
       }
     }
     case 'TOGGLE_USER': {
-      return {
-        ...state,
-        users: state.users.map((user) => user.id === action.id 
-        ? {...user, active: !user.active}
-        : user)
-      }
+      // return {
+      //   ...state,
+      //   users: state.users.map((user) => user.id === action.id 
+      //   ? {...user, active: !user.active}
+      //   : user)
+      // }
+      return produce(state, draft => {
+        const user = draft.users.find(user => user.id === action.id);
+        user.active = !user.active;
+      })
     }
     case 'REMOVE_USER': {
-      return {
-        ...state,
-        users: state.users.filter((user) => user.id !== action.id)
-      }
+      // return {
+      //   ...state,
+      //   users: state.users.filter((user) => user.id !== action.id)
+      // }
+      return produce(state, draft => {
+        const index = draft.users.findIndex(user => user.id === action.id);
+        draft.users.splice(index, 1);
+      })
     }
     default:
       throw new Error('Unhandled Action');
@@ -63,61 +73,20 @@ const initialState = {
   ]
 }
 
+export const UserDispatch = createContext(null);
+
 function App() {
-  
   const [ state, dispatch ] = useReducer(reducer, initialState);
-  const [ form, onChange, reset ] = useInputs({
-    username:'',
-    email: '',
-  });
-  const { username, email } = form;
   const { users } = state;
-  const nextId = useRef(4);
-
-  const onCreate = useCallback(() => {
-    dispatch({
-      type: 'CREATE_USER',
-      user: {
-        id: nextId.current,
-        username,
-        email
-      }
-    })
-    nextId.current += 1;
-    reset();
-  }, [username, email, reset]);
-
-  const onToggle = useCallback((id) => {
-    dispatch({
-      type: 'TOGGLE_USER',
-      id
-    });
-  }, []);
-
-  const onRemove = useCallback((id) => {
-    dispatch({
-      type: 'REMOVE_USER',
-      id
-    });
-  }, [])
-
-const count = useMemo(() => countActiveUser(users), [users]);
+  const count = useMemo(() => countActiveUser(users), [users]);
 
   return (
-    <>
-      <CreateUser 
-      username={username}
-      email={email}
-      onChange={onChange}
-      onCreate={onCreate}
-      />
+    <UserDispatch.Provider value={dispatch}>
+      <CreateUser />
       <UserList 
-      users={users} 
-      onToggle={onToggle} 
-      onRemove={onRemove}
-      />
+      users={users} />
       <div>활성 사용자 수: {count}</div>
-    </>
+    </UserDispatch.Provider>
   );
 }
 
